@@ -8,6 +8,9 @@
   <link rel="icon" href="icon-192.png" type="image/png">
   <meta name="theme-color" content="#4facfe">
   <style>
+    h1{
+      margin-bottom: 0px;
+    }
     body{
       margin:0;
       font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
@@ -16,6 +19,12 @@
       display:flex;
       align-items:center;
       justify-content:center;
+    }
+    .app-version {
+      font-size: 0.9em;
+      margin-bottom: 10px;
+      text-align: center;
+      color: orange; /*#555; */
     }
     .card{
       width:100%;
@@ -75,8 +84,12 @@
   </style>
 </head>
 <body>
+
   <div class="card">
-    <h1>CertGen v1.0.0</h1>
+    <h1>CertGen</h1>
+
+    <!-- App version -->
+    <div id="app-version" class="app-version"></div>
 
     <label for="template">Select template (single-page A4 PDF)</label>
     <input id="template" type="file" accept="application/pdf" />
@@ -121,6 +134,19 @@
 
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script>
+    let appVersion = 'unknown';
+
+    // Load version from manifest
+    fetch('manifest.json')
+      .then(res => res.json())
+      .then(manifest => {
+        appVersion = manifest.version || 'unknown';
+        document.getElementById('app-version').textContent = `v${appVersion}`;
+      })
+      .catch(() => {
+        document.getElementById('app-version').textContent = `(${appVersion})`;
+      });
+
     (function(){
       const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
