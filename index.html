@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CertGen</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <meta name="theme-color" content="#4facfe">
+  <style>
+    body{
+      margin:0;
+      font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+      background:linear-gradient(135deg,#e0eafc,#cfdef3);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .card{
+      width:100%;
+      max-width:820px;
+      background:rgba(255,255,255,0.85);
+      backdrop-filter:blur(10px);
+      padding:24px;
+      border-radius:20px;
+      box-shadow:0 12px 32px rgba(0,0,0,0.1);
+    }
+    h1{
+      margin-top:0;
+      font-size:2rem;
+      text-align:center;
+      background:linear-gradient(90deg,#4facfe,#00f2fe);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    label{font-weight:600;display:block;margin:12px 0 6px}
+    input,select,textarea,button{
+      font:inherit;
+      padding:10px 12px;
+      border:1px solid #ddd;
+      border-radius:10px;
+      box-sizing:border-box;
+    }
+    textarea{width:100%;min-height:140px;resize:vertical}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    button{
+      background:linear-gradient(90deg,#4facfe,#00f2fe);
+      color:#fff;
+      font-weight:600;
+      border:none;
+      cursor:pointer;
+      transition:transform .15s ease, box-shadow .15s ease;
+    }
+    button:hover,button:focus{
+      transform:translateY(-2px);
+      box-shadow:0 6px 18px rgba(0,0,0,0.2);
+    }
+    button:disabled{
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+    .muted{color:#555;font-size:0.9rem}
+    .status{
+      margin-top:12px;
+      font-size:0.9rem;
+      text-align:center;
+      padding:6px 10px;
+      border-radius:8px;
+      background:#f0f4ff;
+      color:#333;
+      display:inline-block;
+    }
+    hr{border:none;height:1px;background:#eee;margin:18px 0}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>CertGen v1.0.0</h1>
+
+    <label for="template">Select template (single-page A4 PDF)</label>
+    <input id="template" type="file" accept="application/pdf" />
+    <div class="muted">The template must be single-page A4 portrait.</div>
+
+    <hr />
+
+    <label for="fontSelect">Font & Size</label>
+    <div class="row">
+      <select id="fontSelect">
+        <option value="Helvetica">Helvetica</option>
+        <option value="TimesRoman">Times-Roman</option>
+        <option value="Courier">Courier</option>
+        <option value="upload">Upload font file</option>
+      </select>
+      <input id="fontSize" type="number" value="22" style="width:100px" />
+      <input id="fontFile" type="file" accept=".ttf,.otf,.woff,.woff2" style="display:none" />
+    </div>
+    <div id="fontFileName" class="muted">No uploaded font</div>
+
+    <hr />
+
+    <label>Position X,Y (points)</label>
+    <div class="row">
+      <input id="x" type="number" value="305" style="width:120px" />
+      <input id="y" type="number" value="340" style="width:120px" />
+    </div>
+
+    <label for="names">Enter names (one per line)</label>
+    <textarea id="names" placeholder="John Smith\nAlice Jones\n..."></textarea>
+
+    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center">
+      <button id="chooseDirBtn">Choose output folder</button>
+      <div id="dirName" class="muted">Defaults to Downloads folder</div>
+    </div>
+
+    <div style="margin-top:20px;text-align:center">
+      <button id="generate">Generate Certificates</button>
+      <div id="status" class="status" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script>
+    (function(){
+      const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+      const templateInput=document.getElementById('template');
+      const fontSelect=document.getElementById('fontSelect');
+      const fontFile=document.getElementById('fontFile');
+      const fontFileName=document.getElementById('fontFileName');
+      const fontSizeInput=document.getElementById('fontSize');
+      const xInput=document.getElementById('x');
+      const yInput=document.getElementById('y');
+      const namesInput=document.getElementById('names');
+      const genBtn=document.getElementById('generate');
+      const statusEl=document.getElementById('status');
+      const chooseDirBtn=document.getElementById('chooseDirBtn');
+      const dirName=document.getElementById('dirName');
+
+      let uploadedFont=null;
+      let outputDirHandle=null;
+
+      fontSelect.addEventListener('change',()=>{
+        fontFile.style.display=fontSelect.value==='upload'?'inline-block':'none';
+      });
+
+      fontFile.addEventListener('change',async e=>{
+        const f=e.target.files[0];
+        if(f){
+          uploadedFont=await f.arrayBuffer();
+          fontFileName.textContent=f.name;
+        }
+      });
+
+      chooseDirBtn.addEventListener('click',async()=>{
+        if(!('showDirectoryPicker'in window)){
+          alert('Your browser does not support folder selection. Files will download normally.');
+          return;
+        }
+        try{
+          outputDirHandle=await window.showDirectoryPicker();
+          dirName.textContent=`Saving to: ${outputDirHandle.name}`;
+        }catch{outputDirHandle=null;dirName.textContent='Defaults to Downloads folder';}
+      });
+
+      function sanitizeFilename(name){return name.replace(/[\\/:*?"<>|]/g,'_').trim()||'certificate'}
+      function showStatus(msg){statusEl.textContent=msg;statusEl.style.display='inline-block'}
+
+      genBtn.addEventListener('click',async()=>{
+        const file=templateInput.files&&templateInput.files[0];
+        if(!file){alert('Please select a template PDF first.');return}
+        const names=namesInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        if(!names.length){alert('Enter at least one name.');return}
+        const templateBytes=await file.arrayBuffer();
+        const x=parseFloat(xInput.value)||305;
+        const y=parseFloat(yInput.value)||340;
+        const fontSize=parseFloat(fontSizeInput.value)||22;
+
+        genBtn.disabled=true;
+        for(let i=0;i<names.length;i++){
+          showStatus(`Generating ${i+1}/${names.length}: ${names[i]}`);
+          const pdfDoc=await PDFDocument.load(templateBytes);
+          const page=pdfDoc.getPages()[0];
+          let font;
+          try{
+            if(fontSelect.value==='Helvetica')font=await pdfDoc.embedFont(StandardFonts.Helvetica);
+            else if(fontSelect.value==='TimesRoman')font=await pdfDoc.embedFont(StandardFonts.TimesRoman);
+            else if(fontSelect.value==='Courier')font=await pdfDoc.embedFont(StandardFonts.Courier);
+            else if(uploadedFont)font=await pdfDoc.embedFont(uploadedFont);
+            else font=await pdfDoc.embedFont(StandardFonts.Helvetica);
+          }catch{font=await pdfDoc.embedFont(StandardFonts.Helvetica)}
+
+          const textWidth=font.widthOfTextAtSize(names[i],fontSize);
+          const drawX=x-(textWidth/2);
+          const drawY=y-(fontSize/2);
+
+          page.drawText(names[i],{x:drawX,y:drawY,size:fontSize,font,color:rgb(0,0,0.5)});
+          const pdfBytes=await pdfDoc.save();
+          const filename=sanitizeFilename(names[i])+'.pdf';
+
+          if(outputDirHandle){
+            try{
+              const fh=await outputDirHandle.getFileHandle(filename,{create:true});
+              const w=await fh.createWritable();
+              await w.write(pdfBytes);
+              await w.close();
+            }catch{}
+          }else{
+            const blob=new Blob([pdfBytes],{type:'application/pdf'});
+            const a=document.createElement('a');
+            a.href=URL.createObjectURL(blob);
+            a.download=filename;
+            a.click();
+          }
+        }
+        genBtn.disabled=false;
+        showStatus(`Done — ${names.length} certificates generated.`);
+      });
+    })();
+  </script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js")
+        .then(() => console.log("Service worker registered"))
+        .catch(err => console.error("SW registration failed:", err));
+    }
+  </script>
+</body>
+</html>
+
